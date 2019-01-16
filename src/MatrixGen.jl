@@ -210,11 +210,11 @@ end
 # Out:
 #   - a: n x n ... x n tensor
 function high_contrast_field(n, d, rho, sigma)
-    a = rand(MersenneTwister(0), [n for i = 1:d]...)    # Uniformly random n x n ... x n trensor
-    Ig = imfilter(a, Kernel.gaussian(sigma))            # Smooth
-    If = (Ig .<= 0.5)                                   # Quantize
-    a[If] .= rho                                        # Highs
-    a[.! If] .= 1/rho                                   # Lows
+    a = rand(MersenneTwister(0), [n for i = 1:d]...)       # Uniformly random n x n ... x n trensor
+    Ig = imfilter(a, Kernel.gaussian([sigma for i = 1:d])) # Smooth
+    If = (Ig .<= 0.5)                                      # Quantize
+    a[If] .= rho                                           # Highs
+    a[.! If] .= 1/rho                                      # Lows
     return a
 end
 
