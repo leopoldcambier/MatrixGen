@@ -9,6 +9,6 @@ for (d, n) in [ (2, 3), (2, 5), (2, 10), (2, 16), (2, 20), (2, 32), (2, 64), (2,
     (I,J,V) = findnz(A)
     V += 0.1 * randn(size(V))
     A = sparse(I,J,V)
-    mmwrite(@sprintf("/Users/lcambier/Stanford/spaND/mats/neglapl_unsym_%d_%d.mm", d, n), A)
+    mmwrite(@sprintf("neglapl_unsym_%d_%d.mm", d, n), A)
 end
 

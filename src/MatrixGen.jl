@@ -21,17 +21,17 @@ function map2mat(A::Dict{Tuple{NTuple{D,Int},NTuple{D,Int}},Float64}) where D
         map[I[i]] = i
     end
     II = I
+    m = length(II)
     n = length(A)
     I = zeros(Int64, n)
     J = zeros(Int64, n)
     V = zeros(Float64, n)
     for (k,((i,j),v)) in enumerate(A)
-        @show i, j
         I[k] = map[i]
         J[k] = map[j]
         V[k] = v
     end
-    return II, sparse(I,J,V,n,n) # Ordering, Matrix
+    return II, sparse(I,J,V,m,m) # Ordering, Matrix
 end
 
 # In each dimension, we have
