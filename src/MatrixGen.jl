@@ -65,9 +65,9 @@ function elliptic_dirichlet(n, d, a, b, c)
         for dim = 1:d
             x = h .* i
             e = Tuple([Int(i == dim) for i = 1:d])
-            A[(i,i .- e)] =                  -  a(x .- e./2)/h^2                 - b(x .- e)[dim]/(2h)
-            A[(i,i     )] = get(A, (i,i), 0) + (a(x .- e./2) + a(x .+ e./2))/h^2                       + c(x)
-            A[(i,i .+ e)] =                  -  a(x .+ e./2)/h^2                 + b(x .+ e)[dim]/(2h)
+            A[(i,i .- e)] =                  -  a(x .- h.*e./2)/h^2                   - b(x .- h.*e)[dim]/(2h)
+            A[(i,i     )] = get(A, (i,i), 0) + (a(x .- h.*e./2) + a(x .+ h.*e./2))/h^2                         + c(x)
+            A[(i,i .+ e)] =                  -  a(x .+ h.*e./2)/h^2                   + b(x .+ h.*e)[dim]/(2h)
         end
     end
     inside = x -> all((x .>= 1) .& (x .<= n))
@@ -201,16 +201,28 @@ function Ad(n, d)
     return A
 end
 
+# Generate high-contrast semi-random images
+# In:
+#   - n: each dimension size
+#   - d: number of dimension
+#   - rho: highs are rho and lows are 1/rho
+#   - sigma: typical size of the patches
+# Out:
+#   - a: n x n ... x n tensor
+function high_contrast_field(n, d, rho, sigma)
+    a = rand(MersenneTwister(0), [n for i = 1:d]...)    # Uniformly random n x n ... x n trensor
+    Ig = imfilter(a, Kernel.gaussian(sigma))            # Smooth
+    If = (Ig .<= 0.5)                                   # Quantize
+    a[If] .= rho                                        # Highs
+    a[.! If] .= 1/rho                                   # Lows
+    return a
+end
+
 # A high-contrast laplacian
 function Ad_hc(n, d, rho)
 
     # Build quantized high contrast field
-    @assert(rho >= 1)
-    a = rand(MersenneTwister(0), [2n+1 for i = 1:d]...)
-    Ig = imfilter(a, Kernel.gaussian(2)) # 2 since 2*n+1
-    If = (Ig .<= 0.5)
-    a[If] .= rho
-    a[.! If] .= 1/rho
+    a = high_contrast_field(2n+1, d, rho, 2)
 
     # Assemble matrix
     I = zeros(Int64, 0)
