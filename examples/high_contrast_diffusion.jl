@@ -1,10 +1,7 @@
 include("../src/MatrixGen.jl")
 using Plots
 
-# 2-D Laplacian
-A = Ad(5, 2)
-
-# High contrast
+## Generate high contrast laplacians
 for n = [512, 1024, 2048]
     for rho = [1, 10, 100, 1000]
         println("Rho = ", rho, " n = ", n)
@@ -13,4 +10,3 @@ for n = [512, 1024, 2048]
     end
 end
 #heatmap(a, aspect_ratio=1)
-
