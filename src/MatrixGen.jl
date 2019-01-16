@@ -1,6 +1,67 @@
 using ImageFiltering
 using SparseArrays
 using Random
+using LinearAlgebra
+
+# Return a tuple with c[d] += pm
+function update(c,d,pm::V) where V
+    l = [V(i) for i in c]
+    l[d] += pm
+    return Tuple(l) # Same type as pm
+end
+
+# Convert a map{(i,j)=>v} into a sparse matrix
+# The i, j's have to be sortable
+function map2mat(A::Dict{Tuple{NTuple{D,Int},NTuple{D,Int}},Float64}) where D
+    I = sort(unique([i for (i,j) in keys(A)]))
+    J = sort(unique([j for (i,j) in keys(A)]))
+    @assert(all(I .== J))
+    map = Dict{NTuple{D,Int},Int}()
+    for i = 1:length(I)
+        map[I[i]] = i
+    end
+    II = I
+    n = length(A)
+    I = zeros(Int64, n)
+    J = zeros(Int64, n)
+    V = zeros(Float64, n)
+    for (k,((i,j),v)) in enumerate(A)
+        @show i, j
+        I[k] = map[i]
+        J[k] = map[j]
+        V[k] = v
+    end
+    return II, sparse(I,J,V,n,n)
+end
+
+# In each dimension, we have
+# U(i-1) * ( -a(i-1/2)/h^2 - b(i-1)/2h      )
+# U(i)   * ( (a(i-1/2)+a(i+1/2))/h^2 + c(i) )
+# U(i+1) * ( -a(i+1/2)/h^2 + b(i+1)/2h      )
+# We have n+2 points over (0, n+1) but boundaries = 0 and are excluded
+# The resulting matrix is of size n^d x n^d
+# Returns (A, X) where X is d x n^d, the coordinates of each point on the grid
+function elliptic_dirichlet(n, d, a, b, c)
+    A = Dict{Tuple{NTuple{d,Int},NTuple{d,Int}},Float64}()
+    h = 1/(n+1)
+    for i_ in CartesianIndices(tuple([1:n for i in 1:d]...))
+        i = Tuple(i_)
+        for dim = 1:d                     
+            A[(i,update(i,dim,-1))] =                  -  a(update(i,dim,-1/2))/h^2                          - b(update(i,dim,-1))/(2h)
+            A[(i,i)]                = get(A, (i,i), 0) + (a(update(i,dim,-1/2)) + a(update(i,dim,+1/2)))/h^2                            + c(i)
+            A[(i,update(i,dim, 1))] =                  -  a(update(i,dim,+1/2))/h^2                          + b(update(i,dim,+1))/(2h)
+        end
+    end
+    inside = x -> all((x .>= 1) .& (x .<= n))
+    A = filter(x -> inside(x.first[1]) && inside(x.first[2]), A)
+    I, A = map2mat(A)
+    X = zeros(Float64, (d, n^d))
+    @assert(length(I) == n^d)
+    for (k,i) = enumerate(I)
+        X[:,k] = h * [i...]
+    end
+    return A, X
+end
 
 # Generate a matrix [dim x N]
 # where each column are some coordinates
@@ -116,7 +177,7 @@ end
 function estimate_cond2(A)
 
     nA, nAi = 0, 0
-    Fc = cholfact(A)
+    Fc = cholesky(Hermitian(A))
     doneA = false
     doneAi = false
 
