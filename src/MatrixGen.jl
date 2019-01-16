@@ -3,15 +3,13 @@ using SparseArrays
 using Random
 using LinearAlgebra
 
-# Return e_k vector
-function ed(d,k)
-    x = zeros(Int64,d)
-    x[k] = 1
-    return tuple(x...)
-end
-
-# Convert a map{(i,j)=>v} into a sparse matrix
-# The i, j's have to be sortable
+## From map to sparse CSC matrix
+# Converts a map (i,j)=>v to a sparse matrix, where i, j are D-tuples of integers
+# In:
+#   - A: a map (i,j) => v
+# Out:
+#   - I: I[k] = i indicates tuple i corresponds to row/column k in A
+#   - A: A[i,j] = v, the sparse matrix
 function map2mat(A::Dict{Tuple{NTuple{D,Int},NTuple{D,Int}},Float64}) where D
     I = sort(unique([i for (i,j) in keys(A)]))
     J = sort(unique([j for (i,j) in keys(A)]))
@@ -34,16 +32,31 @@ function map2mat(A::Dict{Tuple{NTuple{D,Int},NTuple{D,Int}},Float64}) where D
     return II, sparse(I,J,V,m,m) # Ordering, Matrix
 end
 
+# Creates a linear system corresponding to 
+# - div(a(x) grad(u(x))) + b(x) grad(u(x)) + c(x) u(x) = f(x)     (*)
+# with Dirichlet boundary conditions over [0,1]^d, 
+# discretized using n+2 points in each dimension. 
+# The boundaries are set to 0 and, hence, not included
+# b(x) is assumed to be incompressible (div(b(x)) = 0 for all x).
+#
 # In each dimension, we have
 # U(i-1) * ( -a(i-1/2)/h^2 - b(i-1)[d]/2h      )
 # U(i)   * ( (a(i-1/2)+a(i+1/2))/h^2 + c(i) )
 # U(i+1) * ( -a(i+1/2)/h^2 + b(i+1)[d]/2h      )
-# We have n+2 points over [0, 1] but boundaries = 0 and are excluded
+#
 # The resulting matrix is of size n^d x n^d
-# Returns (A, X) where X is d x n^d, the coordinates of each point on the grid
-# a : R^d -> R, a(x) > 0
-# b : R^d -> R^d
-# c : R^d -> R
+# Returns (A, X) where X is d x n^d, the coordinates of each point on the grid and
+# A is n^d x n^d sparse matrix#
+#
+# In:
+#   - n: number of discretization points in each dimension
+#   - d: number of dimensions
+#   - a: function [0,1]^d -> R, the diffusion coefficient
+#   - b: function [0,1]^d -> R^d, the flow field
+#   - c: function [0,1]^d -> R
+# Out:
+#   - A: the n^d x n^d sparse CSC matrix corresponding to the discretization of (*) with second-order FD
+#   - X: the d x n^d grid coordinates of every point
 function elliptic_dirichlet(n, d, a, b, c)
     A = Dict{Tuple{NTuple{d,Int},NTuple{d,Int}},Float64}()
     h = 1/(n+1)
@@ -66,6 +79,93 @@ function elliptic_dirichlet(n, d, a, b, c)
         X[:,k] = h * [i...]
     end
     return A, X
+end
+
+# Estimate the condition number of an SPD matrix A
+# In: A, a sparse SPD matrix
+# Out: An estimate for cond(A)
+function estimate_cond2(A)
+
+    nA, nAi = 0, 0
+    Fc = cholesky(Hermitian(A))
+    doneA = false
+    doneAi = false
+
+    x = randn(size(A,1))
+    n = 200
+
+    Anx = copy(x)
+    for i = 1:n
+        Anx_ = A*Anx
+        nA_ = norm(Anx_) / norm(Anx)
+        if abs(nA - nA_) / nA_ < 1e-3
+            doneA = true
+            println("||A|| converged in $i iterations")
+            break
+        end
+        nA = max(nA_, nA)
+        Anx = Anx_
+    end
+
+    Ainx = copy(x)
+    for i = 1:n
+        Ainx_ = Fc\Ainx
+        nAi_ = norm(Ainx_) / norm(Ainx)
+        if abs(nAi - nAi_) / nAi_ < 1e-3
+            doneAi = true
+            println("||A^-1|| converged in $i iterations")
+            break
+        end
+        nAi = max(nAi, nAi_)
+        Ainx = Ainx_
+    end
+
+    if (!doneA) || (!doneAi)
+        println("Reached max number of iterations in cond2 estimate")
+    end
+
+    return nA * nAi
+
+end
+
+
+# Random graph in 3D space with connections
+# to nearest neighbors
+# In: 
+#   - n: the number of vertices
+#   - deg: the degree of each vertex
+# Out:
+#   - A: a sparse adjacency matrix of the graph
+#   - x: coordinate of vertices
+#   - y: coordinate of vertices
+#   - z: coordinate of vertices
+function rand_A_3D(n::Int64, deg::Int64) 
+    @assert deg < n
+    XYZ = rand(n, 3)
+    x = XYZ[:,1]
+    y = XYZ[:,2]
+    z = XYZ[:,3]
+    I, J, V = Int64[], Int64[], Float64[]
+    sizehint!(I, deg*n)
+    sizehint!(J, deg*n)
+    sizehint!(V, deg*n)
+    for i = 1:n
+        d = (x-x[i]).^2 + (y-y[i]).^2 + (z-z[i]).^2
+        p = sortperm(d)
+        jj = p[2:(2+deg-1)]
+        jj = jj[jj .> i]
+        push!(I, i)
+        push!(J, i)
+        push!(V, deg)
+        for j in jj
+            push!(I, i)
+            push!(J, j)
+            push!(V, -1)
+        end
+    end
+    A = sparse(I, J, V, n, n)
+    A = (A + A')/2.0
+    return (A, x, y, z)
 end
 
 # Generate a matrix [dim x N]
@@ -178,78 +278,3 @@ function Ad_hc(n, d, rho)
     return (A, a)
 end
 
-# Good but slow
-function estimate_cond2(A)
-
-    nA, nAi = 0, 0
-    Fc = cholesky(Hermitian(A))
-    doneA = false
-    doneAi = false
-
-    x = randn(size(A,1))
-    n = 200
-
-    Anx = copy(x)
-    for i = 1:n
-        Anx_ = A*Anx
-        nA_ = norm(Anx_) / norm(Anx)
-        if abs(nA - nA_) / nA_ < 1e-3
-            doneA = true
-            println("||A|| converged in $i iterations")
-            break
-        end
-        nA = max(nA_, nA)
-        Anx = Anx_
-    end
-
-    Ainx = copy(x)
-    for i = 1:n
-        Ainx_ = Fc\Ainx
-        nAi_ = norm(Ainx_) / norm(Ainx)
-        if abs(nAi - nAi_) / nAi_ < 1e-3
-            doneAi = true
-            println("||A^-1|| converged in $i iterations")
-            break
-        end
-        nAi = max(nAi, nAi_)
-        Ainx = Ainx_
-    end
-
-    if (!doneA) || (!doneAi)
-        println("Reached max number of iterations in cond2 estimate")
-    end
-
-    return nA * nAi
-
-end
-
-# Random graph in 3D space with connections
-# to nearest neighbors
-function rand_A_3D(n::Int64, deg::Int64) 
-    @assert deg < n
-    XYZ = rand(n, 3)
-    x = XYZ[:,1]
-    y = XYZ[:,2]
-    z = XYZ[:,3]
-    I, J, V = Int64[], Int64[], Float64[]
-    sizehint!(I, deg*n)
-    sizehint!(J, deg*n)
-    sizehint!(V, deg*n)
-    for i = 1:n
-        d = (x-x[i]).^2 + (y-y[i]).^2 + (z-z[i]).^2
-        p = sortperm(d)
-        jj = p[2:(2+deg-1)]
-        jj = jj[jj .> i]
-        push!(I, i)
-        push!(J, i)
-        push!(V, deg)
-        for j in jj
-            push!(I, i)
-            push!(J, j)
-            push!(V, -1)
-        end
-    end
-    A = sparse(I, J, V, n, n)
-    A = (A + A')/2.0
-    return (A, x, y, z)
-end
