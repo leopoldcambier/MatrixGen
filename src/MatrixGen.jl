@@ -3,11 +3,11 @@ using SparseArrays
 using Random
 using LinearAlgebra
 
-# Return a tuple with c[d] += pm
-function update(c,d,pm::V) where V
-    l = [V(i) for i in c]
-    l[d] += pm
-    return Tuple(l) # Same type as pm
+# Return e_k vector
+function ed(d,k)
+    x = zeros(Int64,d)
+    x[k] = 1
+    return tuple(x...)
 end
 
 # Convert a map{(i,j)=>v} into a sparse matrix
@@ -31,25 +31,30 @@ function map2mat(A::Dict{Tuple{NTuple{D,Int},NTuple{D,Int}},Float64}) where D
         J[k] = map[j]
         V[k] = v
     end
-    return II, sparse(I,J,V,n,n)
+    return II, sparse(I,J,V,n,n) # Ordering, Matrix
 end
 
 # In each dimension, we have
-# U(i-1) * ( -a(i-1/2)/h^2 - b(i-1)/2h      )
+# U(i-1) * ( -a(i-1/2)/h^2 - b(i-1)[d]/2h      )
 # U(i)   * ( (a(i-1/2)+a(i+1/2))/h^2 + c(i) )
-# U(i+1) * ( -a(i+1/2)/h^2 + b(i+1)/2h      )
-# We have n+2 points over (0, n+1) but boundaries = 0 and are excluded
+# U(i+1) * ( -a(i+1/2)/h^2 + b(i+1)[d]/2h      )
+# We have n+2 points over [0, 1] but boundaries = 0 and are excluded
 # The resulting matrix is of size n^d x n^d
 # Returns (A, X) where X is d x n^d, the coordinates of each point on the grid
+# a : R^d -> R, a(x) > 0
+# b : R^d -> R^d
+# c : R^d -> R
 function elliptic_dirichlet(n, d, a, b, c)
     A = Dict{Tuple{NTuple{d,Int},NTuple{d,Int}},Float64}()
     h = 1/(n+1)
     for i_ in CartesianIndices(tuple([1:n for i in 1:d]...))
         i = Tuple(i_)
-        for dim = 1:d                     
-            A[(i,update(i,dim,-1))] =                  -  a(update(i,dim,-1/2))/h^2                          - b(update(i,dim,-1))/(2h)
-            A[(i,i)]                = get(A, (i,i), 0) + (a(update(i,dim,-1/2)) + a(update(i,dim,+1/2)))/h^2                            + c(i)
-            A[(i,update(i,dim, 1))] =                  -  a(update(i,dim,+1/2))/h^2                          + b(update(i,dim,+1))/(2h)
+        for dim = 1:d
+            x = h .* i
+            e = Tuple([Int(i == dim) for i = 1:d])
+            A[(i,i .- e)] =                  -  a(x .- e./2)/h^2                 - b(x .- e)[dim]/(2h)
+            A[(i,i     )] = get(A, (i,i), 0) + (a(x .- e./2) + a(x .+ e./2))/h^2                       + c(x)
+            A[(i,i .+ e)] =                  -  a(x .+ e./2)/h^2                 + b(x .+ e)[dim]/(2h)
         end
     end
     inside = x -> all((x .>= 1) .& (x .<= n))
