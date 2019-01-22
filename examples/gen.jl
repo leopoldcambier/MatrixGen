@@ -1,8 +1,7 @@
 include("../src/MatrixGen.jl")
 using MatrixMarket
 
-folder = "/scratch/groups/darve/lcambier/matrices/laplacians2/"
-
+folder = "."
 @show folder 
 
 d = 2
