@@ -39,10 +39,10 @@ end
 # The boundaries are set to 0 and, hence, not included
 # b(x) is assumed to be incompressible (div(b(x)) = 0 for all x).
 #
-# In each dimension, we have
-# U(i-1) * ( -a(i-1/2)/h^2 - b(i-1)[d]/2h      )
+# In each dimension, we have (for upwind = false)
+# U(i-1) * ( -a(i-1/2)/h^2 - b(i)[d]/2h     )
 # U(i)   * ( (a(i-1/2)+a(i+1/2))/h^2 + c(i) )
-# U(i+1) * ( -a(i+1/2)/h^2 + b(i+1)[d]/2h      )
+# U(i+1) * ( -a(i+1/2)/h^2 + b(i)[d]/2h     )
 #
 # The resulting matrix is of size n^d x n^d
 # Returns (A, X) where X is d x n^d, the coordinates of each point on the grid and
@@ -57,7 +57,7 @@ end
 # Out:
 #   - A: the n^d x n^d sparse CSC matrix corresponding to the discretization of (*) with second-order FD
 #   - X: the d x n^d grid coordinates of every point
-function elliptic_dirichlet(n, d, a, b, c)
+function elliptic_dirichlet(n, d, a, b, c; upwind=false)
     A = Dict{Tuple{NTuple{d,Int},NTuple{d,Int}},Float64}()
     h = 1/(n+1)
     for i_ in CartesianIndices(tuple([1:n for i in 1:d]...))
@@ -65,9 +65,20 @@ function elliptic_dirichlet(n, d, a, b, c)
         for dim = 1:d
             x = h .* i
             e = Tuple([Int(i == dim) for i = 1:d])
-            A[(i,i .- e)] =                  -  a(x .- h.*e./2)/h^2                   - b(x .- h.*e)[dim]/(2h)
-            A[(i,i     )] = get(A, (i,i), 0) + (a(x .- h.*e./2) + a(x .+ h.*e./2))/h^2                         + c(x)
-            A[(i,i .+ e)] =                  -  a(x .+ h.*e./2)/h^2                   + b(x .+ h.*e)[dim]/(2h)
+            # Diffusion
+            A[(i,i .- e)] =                  -  a(x .- h.*e./2)/h^2                   
+            A[(i,i     )] = get(A, (i,i), 0) + (a(x .- h.*e./2) + a(x .+ h.*e./2))/h^2
+            A[(i,i .+ e)] =                  -  a(x .+ h.*e./2)/h^2                   
+            # Advection
+            if(upwind)
+                A[(i,i .- e)] += - b(x)[dim]/(h)
+                A[(i,i     )] += + b(x)[dim]/(h)
+            else
+                A[(i,i .- e)] += - b(x)[dim]/(2h)
+                A[(i,i .+ e)] += + b(x)[dim]/(2h)
+            end
+            # Multiplication
+            A[(i,i)] += c(x)
         end
     end
     inside = x -> all((x .>= 1) .& (x .<= n))
