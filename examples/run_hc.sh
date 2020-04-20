@@ -2,10 +2,10 @@
 #
 #SBATCH --time=24:00:00
 #SBATCH --mem=100G
-#SBATCH -J gen
+#SBATCH -J hc
 #SBATCH -p mc,owners
-#SBATCH -o gen.%j.out
+#SBATCH -o hc.%j.out
 
 using julia
 
-srun julia gen.jl
+srun julia high_contrast_diffusion.jl
