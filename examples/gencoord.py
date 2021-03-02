@@ -4,7 +4,7 @@ from scipy.io import mmwrite
 d = 3
 h = [0.1,0.1,0.1] # exact values are not relevant but pick the same here
 folder = 'mats/'
-for n in [10,20,30,40,50,60]:
+for n in [50,63,80,101,127,160,202,254]:
 	gridm = n
 	gridn = n
 	coordinates = np.zeros((d,n**d))
