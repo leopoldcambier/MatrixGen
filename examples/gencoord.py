@@ -14,4 +14,4 @@ for n in [50,60,80,100,125,160,200,250]:
 	    coordinates[1,i] = iy
 	    coordinates[2,i] = iz
 	mmwrite(folder+'neglapl_coord3d_{}_{}_{}'.format(n,n,n),coordinates)
-	print('written to ' + 'neglapl_coord3d_{}_{}_{}'.format(n,n,n),coordinates)
+	print('written to ' + 'neglapl_coord3d_{}_{}_{}'.format(n,n,n))
